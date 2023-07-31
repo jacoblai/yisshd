@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/creack/pty"
@@ -15,7 +16,9 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 	"yisshd/lpasswd"
+	"yisshd/models"
 	"yisshd/tools"
 )
 
@@ -27,7 +30,7 @@ func main() {
 	)
 	flag.Parse()
 
-	//denyLogin := sync.Map{}
+	denyLogin := sync.Map{}
 
 	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
@@ -44,10 +47,29 @@ func main() {
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			ctx := lpasswd.NewAuthCtx()
 			ok, err := lpasswd.VerifyPass(ctx, c.User(), string(pass))
-			if ok {
-				return new(ssh.Permissions), nil
+			if !ok {
+				lv, ok := denyLogin.Load(c.User())
+				if !ok {
+					denyLogin.Store(c.User(), &models.Deny{Count: 1, At: time.Now()})
+					log.Println(c.User(), "first")
+				} else {
+					v := lv.(*models.Deny)
+					if time.Now().Sub(v.At).Seconds() > 300 {
+						denyLogin.Delete(c.User())
+					} else {
+						if v.Count >= 10 {
+							log.Println(c.User(), "count finish", v.Count)
+							return nil, errors.New("deny login")
+						}
+						v.Count++
+						log.Println(c.User(), "count", v.Count)
+						v.At = time.Now()
+						denyLogin.Store(c.User(), v)
+					}
+				}
+				return nil, fmt.Errorf("password rejected for %s", err)
 			}
-			return nil, fmt.Errorf("password rejected for %s", err)
+			return new(ssh.Permissions), nil
 		},
 	}
 
