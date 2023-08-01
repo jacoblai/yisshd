@@ -17,6 +17,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"yisshd/forward"
 	"yisshd/lpasswd"
 	"yisshd/models"
 	"yisshd/tools"
@@ -51,18 +52,15 @@ func main() {
 				lv, ok := denyLogin.Load(c.User())
 				if !ok {
 					denyLogin.Store(c.User(), &models.Deny{Count: 1, At: time.Now()})
-					log.Println(c.User(), "first")
 				} else {
 					v := lv.(*models.Deny)
 					if time.Now().Sub(v.At).Seconds() > 300 {
 						denyLogin.Delete(c.User())
 					} else {
 						if v.Count >= 10 {
-							log.Println(c.User(), "count finish", v.Count)
 							return nil, errors.New("deny login")
 						}
 						v.Count++
-						log.Println(c.User(), "count", v.Count)
 						v.At = time.Now()
 						denyLogin.Store(c.User(), v)
 					}
@@ -135,8 +133,14 @@ func handleChannel(newChannel ssh.NewChannel) {
 	// channel type of "session". The also describes
 	// "x11", "direct-tcpip" and "forwarded-tcpip"
 	// channel types.
-	if t := newChannel.ChannelType(); t != "session" {
+	t := newChannel.ChannelType()
+	if t != "session" && t != "direct-tcpip" {
 		_ = newChannel.Reject(ssh.UnknownChannelType, fmt.Sprintf("unknown channel type: %s", t))
+		return
+	}
+
+	if t == "direct-tcpip" {
+		forward.DirectTcpIpHandler(newChannel)
 		return
 	}
 
