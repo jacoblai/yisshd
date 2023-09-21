@@ -18,6 +18,7 @@ Yisshd 是 Golang 开发的无依赖 ssh 服务器。
     - `DenyLogin` 密码错误自动禁止登陆，防止爆力破解
     - `DirectTcpip` 代理模式，方便数据库工具通过ssh跳板内网网络连接数据库
     - `SystemAccount` 支持系统账号验证用户身份
+    - `SFTP` 集成SFTP协议
     - 支持 Linux，macOS（操作系统）
 
 * **不被支持**
